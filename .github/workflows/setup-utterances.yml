@@ -1,0 +1,41 @@
+name: Setup Utterances
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_owner:
+        description: 'Repository owner'
+        required: true
+      repo_name:
+        description: 'Repository name'
+        required: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Setup Utterances
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO_OWNER=${{ inputs.repo_owner }}
+          REPO_NAME=${{ inputs.repo_name }}
+          
+          sed -i "s/GITHUB_USERNAME/$REPO_OWNER/g" utterances.json _layouts/post.html
+          sed -i "s/REPO_NAME/$REPO_NAME/g" _layouts/post.html
+          
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add utterances.json _layouts/post.html
+          git commit -m "Setup Utterances"
+          git push
+
+      - name: Delete this workflow
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git rm .github/workflows/setup-utterances.yml
+          git commit -m "Remove setup-utterances workflow"
+          git push

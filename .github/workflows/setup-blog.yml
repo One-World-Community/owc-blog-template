@@ -1,0 +1,64 @@
+name: Setup Blog
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Fetch user data
+      id: user_data
+      uses: octokit/request-action@v2.x
+      with:
+        route: GET /user
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set variables
+      id: set_variables
+      run: |
+        echo "GITHUB_USERNAME=${{ fromJson(steps.user_data.outputs.data).login }}" >> $GITHUB_ENV
+        echo "USER_EMAIL=${{ fromJson(steps.user_data.outputs.data).email }}" >> $GITHUB_ENV
+        echo "SITE_TITLE=${{ fromJson(steps.user_data.outputs.data).name }}'s Blog" >> $GITHUB_ENV
+        echo "BLOG_OWNER=${{ fromJson(steps.user_data.outputs.data).name }}" >> $GITHUB_ENV
+
+    - name: Prompt for missing information
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          const fs = require('fs');
+          const prompts = [
+            {name: 'SITE_DESCRIPTION', message: 'Enter a brief description for your blog:'},
+            {name: 'TWITTER_USERNAME', message: 'Enter your Twitter username (without @):'},
+            {name: 'BLOG_TOPICS', message: 'Enter the main topics of your blog (comma-separated):'}
+          ];
+          
+          for (const prompt of prompts) {
+            const response = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Input needed: ${prompt.name}`,
+              body: prompt.message
+            });
+            console.log(`Created issue #${response.data.number} for ${prompt.name}`);
+          }
+
+    - name: Update files
+      run: |
+        sed -i 's/${SITE_TITLE}/${{ env.SITE_TITLE }}/g' _config.yml README.md
+        sed -i 's/${USER_EMAIL}/${{ env.USER_EMAIL }}/g' _config.yml
+        sed -i 's/${GITHUB_USERNAME}/${{ env.GITHUB_USERNAME }}/g' _config.yml utterances.json
+        sed -i 's/${BLOG_OWNER}/${{ env.BLOG_OWNER }}/g' index.markdown
+
+    - name: Commit changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        git commit -m "Initialize blog with user data" || echo "No changes to commit"
+        git push
